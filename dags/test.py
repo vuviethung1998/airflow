@@ -10,7 +10,7 @@ default_args = {
     'email_on_retry': True
 }
 
-dag = DAG('test',
+dag = DAG('test2',
           default_args=default_args,
           description='AnhTV test',
           schedule_interval='@once',
@@ -18,7 +18,7 @@ dag = DAG('test',
           catchup=False)
 
 t1 = BashOperator(
-    task_id="watermark_for_dcs",
-    bash_command="/home/vuviethung/code/code/cen_jobs/project_statistics_monthly/run-project-filtering.sh",
+    task_id="test2",
+    bash_command="/home/vuviethung/code/cenjobs/test/run-test.sh",
     dag=dag,
 )

@@ -1,92 +1,91 @@
 version: "3"
+
 services:
-    postgres:
-        image: "postgres:9.6"
-        restart: always
-        container_name: "postgres"
-        environment:
-            - POSTGRES_USER=airflow
-            - POSTGRES_PASSWORD=airflow
-            - POSTGRES_DB=airflow
-        ports:
-            - "5432:5432"
-        volumes:
-            - "/etc/timezone:/etc/timezone:ro"
-            - "/etc/localtime:/etc/localtime:ro"
+  postgres:
+    restart: always
+    image: postgres:9.6
+    ports:
+        - 5432:5432
+    environment:
+        - POSTGRES_USER=airflow
+        - POSTGRES_PASSWORD=airflow
+        - POSTGRES_DB=airflow
+    volumes:
+        - "/etc/timezone:/etc/timezone:ro"
+        - "/etc/localtime:/etc/localtime:ro"
+  pgadmin:
+    restart: always
+    image: dpage/pgadmin4
+    environment: 
+        - PGADMIN_DEFAULT_EMAIL=admin
+        - PGADMIN_DEFAULT_PASSWORD=admin
+    volumes: 
+        - "/etc/timezone:/etc/timezone:ro"
+        - "/etc/localtime:/etc/localtime:ro"
+    ports: 
+        - 5051:80
 
-    pgadmin:
-        restart: always
-        image: dpage/pgadmin4
-        environment:
-            - PGADMIN_DEFAULT_EMAIL=admin
-            - PGADMIN_DEFAULT_PASSWORD=admin
-        volumes:
-            - "/etc/timezone:/etc/timezone:ro"
-            - "/etc/localtime:/etc/localtime:ro"
-        ports:
-            - 5051:80
+  redis:
+    image: redis:5.0.3
+    restart: always
+    ports:
+        - "6379:6379"
 
-    # uncomment initdb if you need initdb at first run
-    # initdb:
-    #     build: .
-    #     entrypoint: airflow initdb
-    #     depends_on:
-    #         - postgres
+  af_webserver:
+    image: webapp:5005/g_airflow
+    restart: always
+    depends_on:
+        - postgres
+        - redis
+    environment:
+        - LOAD_EX=n
+        - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+        - EXECUTOR=Celery
+    volumes:
+        - "./config/airflow.cfg:/usr/local/airflow/airflow.cfg"
+        - "./dags:/usr/local/airflow/dags"
+        - "/etc/timezone:/etc/timezone:ro"
+        - "/etc/localtime:/etc/localtime:ro"
+    ports:
+        - "8080:8080"
+    command: webserver
+    healthcheck:
+        test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+        interval: 30s
+        timeout: 30s
+        retries: 3
+    extra_hosts:
+        - "hd02:10.10.137.42"
+        - "hd03:10.10.137.43"
+        - "crawler:10.10.137.10"
+        - "db2:10.10.137.31"
+        - "crawler_in_db2:10.10.137.31"
 
-    webserver:
-        build: .
-        restart: always
-        depends_on:
-            - postgres
-        volumes:
-            - ./dags:/usr/local/airflow/dags
-            - ./logs:/usr/local/airflow/logs
-        ports:
-            - "8080:8080"
-        entrypoint: airflow webserver
-        healthcheck:
-            test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
-            interval: 30s
-            timeout: 30s
-            retries: 3
-    
-    scheduler:
-        build: .
-        restart: always
-        depends_on:
-            - postgres
-            - webserver
-        volumes:
-            - ./dags:/usr/local/airflow/dags
-            - ./logs:/usr/local/airflow/logs
-        entrypoint: airflow scheduler
-        healthcheck:
-            test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-scheduler.pid ]"]
-            interval: 30s
-            timeout: 30s
-            retries: 3
-    
-    redis:
-        image: redis:5.0.5
-        ports:
-            - "6379:6379"   
-        restart: always
-        
-    flower:
-        build: .
-        restart: always
-        depends_on:
-            - postgres
-            - redis
-        volumes:
-            - ./dags:/usr/local/airflow/dags
-            - ./logs:/usr/local/airflow/logs
-        entrypoint: airflow flower
-        healthcheck:
-            test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-flower.pid ]"]
-            interval: 30s
-            timeout: 30s
-            retries: 3
-        ports:
-            - "5555:5555"
-            
+  af_flower:
+    image: puckel/docker-airflow
+    restart: always
+    depends_on:
+        - redis
+    environment:
+        - EXECUTOR=Celery
+    ports:
+        - "5555:5555"
+    volumes:
+        - "/etc/timezone:/etc/timezone:ro"
+        - "/etc/localtime:/etc/localtime:ro"
+    command: flower
+
+  af_scheduler:
+    image: puckel/docker-airflow
+    restart: always
+    depends_on:
+        - af_webserver
+    volumes:
+        - "./dags:/usr/local/airflow/dags"
+        - "/etc/timezone:/etc/timezone:ro"
+        - "/etc/localtime:/etc/localtime:ro"
+    environment:
+        - LOAD_EX=n
+        - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+        - EXECUTOR=Celery
+    command: scheduler
